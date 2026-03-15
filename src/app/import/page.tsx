@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import { useBudget } from '@/lib/store';
 import { categorizeTransaction } from '@/lib/categorize';
+import { parsePdf } from '@/lib/parsePdf';
 import type { Transaction, CategorySummary } from '@/lib/types';
 import Card from '@/components/Card';
 import { fmt } from '@/lib/format';
@@ -13,9 +14,9 @@ export default function ImportPage() {
   const [preview, setPreview] = useState<Transaction[]>([]);
   const [importing, setImporting] = useState(false);
   const [editCats, setEditCats] = useState<Record<number, string>>({});
+  const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleFile = useCallback((file: File) => {
-    setImporting(true);
+  const handleCsv = useCallback((file: File) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -24,14 +25,11 @@ export default function ImportPage() {
         const txns: Transaction[] = [];
 
         for (const row of rows) {
-          // Try to find date, description, and amount columns
           const date = row['Date'] || row['date'] || row['Transaction Date'] || row['Posted Date'] || row['Posting Date'] || Object.values(row)[0] || '';
           const desc = row['Description'] || row['description'] || row['Memo'] || row['memo'] || row['Name'] || row['Payee'] || Object.values(row)[1] || '';
 
-          // Try multiple amount column names
           let amountStr = row['Amount'] || row['amount'] || row['Debit'] || row['debit'] || '';
           if (!amountStr) {
-            // Try credit/debit columns
             const debit = row['Debit'] || row['Withdrawal'] || '';
             const credit = row['Credit'] || row['Deposit'] || '';
             amountStr = debit || credit || Object.values(row)[2] || '';
@@ -50,6 +48,27 @@ export default function ImportPage() {
       error: () => setImporting(false),
     });
   }, []);
+
+  const handleFile = useCallback((file: File) => {
+    setImporting(true);
+    setParseError(null);
+
+    if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+      parsePdf(file)
+        .then((txns) => {
+          if (txns.length === 0) {
+            setParseError('No transactions found in this PDF. The parser looks for lines with a date and dollar amount. Try exporting a CSV from your bank instead.');
+          }
+          setPreview(txns);
+        })
+        .catch(() => {
+          setParseError('Could not read this PDF. The file may be image-based (scanned). Try a CSV export from your bank instead.');
+        })
+        .finally(() => setImporting(false));
+    } else {
+      handleCsv(file);
+    }
+  }, [handleCsv]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -92,7 +111,7 @@ export default function ImportPage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Import Bank Statements</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Upload CSV files from your bank. Transactions are auto-categorized — you can adjust categories before confirming.
+        Upload CSV or PDF bank statements. Transactions are auto-categorized — you can adjust categories before confirming.
       </p>
 
       {/* Upload zone */}
@@ -103,20 +122,23 @@ export default function ImportPage() {
           className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors"
         >
           <p className="text-gray-500 dark:text-gray-400 mb-3">
-            {importing ? 'Processing...' : 'Drag & drop a CSV file here, or click to browse'}
+            {importing ? 'Processing...' : 'Drag & drop a CSV or PDF file here, or click to browse'}
           </p>
+          {parseError && (
+            <p className="text-sm text-red-500 mb-3">{parseError}</p>
+          )}
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,.pdf"
             onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
             className="hidden"
-            id="csv-upload"
+            id="file-upload"
           />
           <label
-            htmlFor="csv-upload"
+            htmlFor="file-upload"
             className="inline-block px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium cursor-pointer hover:bg-emerald-700 transition-colors"
           >
-            Choose CSV File
+            Choose CSV or PDF
           </label>
         </div>
       </Card>
