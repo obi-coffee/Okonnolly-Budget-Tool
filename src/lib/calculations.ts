@@ -29,7 +29,7 @@ export function calculateAvalanchePayoff(
   }));
 
   const totalMinPayments = debts.reduce((s, d) => s + d.minimumPayment, 0);
-  let totalBudget = totalMinPayments + extraMonthly;
+  const totalBudget = totalMinPayments + extraMonthly;
   let month = 0;
   const maxMonths = 600; // 50 year cap
 
