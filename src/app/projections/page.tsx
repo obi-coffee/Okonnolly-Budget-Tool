@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 
 export default function ProjectionsPage() {
-  const { debts, incomes } = useBudget();
+  const { debts } = useBudget();
   const [annualReturn, setAnnualReturn] = useState(7);
   const [years, setYears] = useState(30);
   const [extraContribution, setExtraContribution] = useState(0);
