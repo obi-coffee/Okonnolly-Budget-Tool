@@ -14,11 +14,16 @@ export interface Debt {
   minimumPayment: number;
 }
 
+export type AccountType = 'checking' | 'credit_card';
+
 export interface Transaction {
   date: string;
   description: string;
   amount: number;
   category: string;
+  source?: AccountType;
+  /** True if this looks like a credit card payment on a checking statement */
+  isCcPayment?: boolean;
 }
 
 export interface CategorySummary {

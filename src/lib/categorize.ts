@@ -1,3 +1,5 @@
+import { lookupCategory } from './categoryMemory';
+
 const RULES: [RegExp, string][] = [
   // Groceries
   [/walmart|kroger|aldi|publix|safeway|trader.?joe|whole.?foods|costco|sam.?s club|heb|meijer|food.?lion|giant|wegmans|sprouts|piggly|winn.?dixie|grocery|supermarket/i, 'Groceries'],
@@ -31,9 +33,34 @@ const RULES: [RegExp, string][] = [
   [/daycare|childcare|nanny|babysit|kindercare/i, 'Childcare'],
 ];
 
+/**
+ * Categorize a transaction description.
+ * Checks user-confirmed memory first, then falls back to regex rules.
+ */
 export function categorizeTransaction(description: string): string {
+  // Check learned categories first
+  const learned = lookupCategory(description);
+  if (learned) return learned;
+
   for (const [pattern, category] of RULES) {
     if (pattern.test(description)) return category;
   }
   return 'Other';
+}
+
+/** Credit card payment patterns — matches descriptions on checking statements */
+const CC_PAYMENT_PATTERNS = [
+  /credit\s*card\s*payment/i,
+  /payment\s+to\s+(chase|citi|amex|american\s*express|capital\s*one|discover|wells\s*fargo|bank\s*of\s*america|barclays|synchrony|usaa)/i,
+  /\b(visa|mastercard|amex|discover)\s*(payment|pmt)\b/i,
+  /online\s*payment.*\b(card|credit)\b/i,
+  /\bpmt\s+(chase|citi|amex|capital\s*one|discover)\b/i,
+  /\b(chase|citi|capital\s*one|discover|amex|barclays)\s*(card|credit)\s*(payment|pmt)\b/i,
+  /autopay\s*(credit|card|visa|mc)/i,
+  /\bcc\s*payment\b/i,
+];
+
+/** Returns true if a checking-account transaction looks like a credit card payoff */
+export function isCreditCardPayment(description: string): boolean {
+  return CC_PAYMENT_PATTERNS.some(p => p.test(description));
 }
