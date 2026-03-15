@@ -24,39 +24,38 @@ function extractDate(text: string): string | null {
   return null;
 }
 
-function extractAmounts(text: string): { value: number; index: number; raw: string }[] {
-  const results: { value: number; index: number; raw: string }[] = [];
+function extractAmounts(text: string): { value: number; index: number; raw: string; end: number }[] {
+  const results: { value: number; index: number; raw: string; end: number }[] = [];
   const re = new RegExp(AMOUNT_RE.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const raw = m[0];
-    const isNeg = raw.startsWith('-') || raw.startsWith('(');
     const value = parseFloat(raw.replace(/[$,()]/g, ''));
     if (isNaN(value) || value === 0) continue;
-    results.push({ value: Math.abs(value), index: m.index, raw });
+    results.push({ value: Math.abs(value), index: m.index, raw, end: m.index + raw.length });
   }
   return results;
 }
 
 // ---------------------------------------------------------------------------
-// Section detection — determines whether we're in a transaction area or not
+// Section detection
 // ---------------------------------------------------------------------------
 
 /** Sections we should PARSE for transactions */
 const TRANSACTION_SECTION_RE =
-  /\b(new\s*charges|purchases|transactions?|activity\s*detail|account\s*activity|payments?\s*and\s*credits|checks?\s*and\s*other\s*deductions|online\s*and\s*electronic|banking.?debit\s*card|deposits?\s*and\s*other\s*additions|withdrawals?|other\s*debits|other\s*credits|card\s*activity|recent\s*activity)\b/i;
+  /\b(new\s*charges|purchases|transactions?|activity\s*detail|account\s*activity|payments?\s*and\s*credits|checks?\s*and\s*other\s*deductions|online\s*and\s*electronic|banking.?debit\s*card|deposits?\s*and\s*other\s*additions|withdrawals?|other\s*debits|other\s*credits|card\s*activity|recent\s*activity|electronic\s*(banking|transfers?))\b/i;
 
-/** Sections we should SKIP entirely (summaries, balance tables, etc.) */
+/** Sections we should SKIP entirely */
 const SKIP_SECTION_RE =
-  /\b(account\s*summary|balance\s*summary|daily\s*balance|interest\s*summary|year.?to.?date|account\s*information|important\s*information|important\s*messages|rewards?\s*summary|fee\s*summary|rate\s*summary|disclosure|notice|how\s*to\s*reach\s*us|customer\s*service)\b/i;
+  /\b(account\s*summary|balance\s*summary|daily\s*(ledger\s*)?balance|interest\s*summary|year.?to.?date|account\s*information|important\s*information|important\s*messages|rewards?\s*summary|fee\s*summary|rate\s*summary|disclosure|notice|how\s*to\s*reach\s*us|customer\s*service|service\s*charges?\s*and\s*fees|transaction\s*summary)\b/i;
 
 /** Lines that are headers/footers/noise — always skip */
 const SKIP_LINE_RE =
-  /^\s*(page\s+\d|continued\b|total\b|totals\b|subtotal|balance\s*forward|previous\s*balance|new\s*balance|opening\s*balance|closing\s*balance|ending\s*balance|beginning\s*balance|statement\s*(period|date|closing)|account\s*(number|ending|type)|member\s*since|credit\s*limit|available\s*credit|minimum\s*payment|payment\s*due|amount\s*due|rewards|points|cashback|annual\s*percentage|apr\b|interest\s*charge|annual\s*fee|fee\s*charged|days?\s*in\s*(period|billing)|average\s*(daily\s*)?balance|there\s*were\s*no|no\s*transactions)/i;
+  /^\s*(page\s+\d|continued\b|total\b|totals\b|subtotal|balance\s*forward|previous\s*balance|new\s*balance|opening\s*balance|closing\s*balance|ending\s*balance|beginning\s*balance|statement\s*(period|date|closing)|account\s*(number|ending|type)|member\s*since|credit\s*limit|available\s*credit|minimum\s*payment|payment\s*due|amount\s*due|rewards|points|cashback|annual\s*percentage|apr\b|interest\s*charge|annual\s*fee|fee\s*charged|days?\s*in\s*(period|billing)|average\s*(daily\s*|monthly\s*)?balance|there\s*were\s*no|no\s*transactions|items\s+amount)/i;
 
-/** Date column header — skip these */
+/** Column header lines — skip these */
 const COLUMN_HEADER_RE =
-  /^\s*(date|trans\.?\s*date|post\.?\s*date|posting\s*date|description|merchant|amount|debit|credit|balance|reference|ref\.?\s*#?|check\s*#?)\s*$/i;
+  /^\s*(date\s*(posted)?|trans\.?\s*date|post\.?\s*date|posting\s*date|description|merchant|amount|debit|credit|balance|reference|ref\.?\s*#?|check\s*#?|date\s+amount\s+description|date\s+description\s+amount)\s*$/i;
 
 // ---------------------------------------------------------------------------
 // Text item and line building
@@ -111,23 +110,74 @@ function joinItems(items: TextItem[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// Main parser
+// Description extraction — handles both column orders
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a PDF bank or credit-card statement into transactions.
+ * Extract the description from a line that has a date and amount(s).
  *
- * Handles Amex credit card statements and PNC checking statements specifically,
- * plus a generic fallback for other institutions.
+ * Handles two common layouts:
+ *   Layout A (Amex, most CCs):  Date ... Description ... Amount
+ *   Layout B (PNC, some banks): Date ... Amount ... Description
  *
- * Strategy:
- *  1. Extract text items → build visual lines across all pages
- *  2. Track which "section" we're in (transaction area vs summary/skip)
- *  3. For transaction lines: match date + amount, extract description between
- *  4. Multi-line descriptions: continuation lines (no date, no amount) are
- *     appended to the previous transaction's description
- *  5. Look-ahead for amounts on the next line when the date line has none
+ * The heuristic: try Layout A first (text between date and first amount).
+ * If that yields nothing meaningful, try Layout B (text after last amount).
  */
+function extractDescription(
+  line: string,
+  date: string,
+  amounts: { value: number; index: number; raw: string; end: number }[],
+): string {
+  const dateIdx = line.indexOf(date);
+  const afterDate = dateIdx + date.length;
+  const firstAmt = amounts[0];
+
+  // --- Layout A: description is between date and first amount ---
+  let descA = line.substring(afterDate, firstAmt.index).trim();
+
+  // If there's a second date (posting date), skip past it
+  const postDate = extractDate(descA);
+  if (postDate) {
+    const pdIdx = descA.indexOf(postDate);
+    descA = descA.substring(pdIdx + postDate.length).trim();
+  }
+
+  // --- Layout B: description is after the last amount ---
+  const lastAmt = amounts[amounts.length - 1];
+  const descB = line.substring(lastAmt.end).trim();
+
+  // Decide which layout to use
+  const cleanA = cleanDesc(descA);
+  const cleanB = cleanDesc(descB);
+
+  // If Layout A has a meaningful description, prefer it
+  if (cleanA.length >= 3) return cleanA;
+
+  // Otherwise use Layout B (PNC-style: date → amount → description)
+  if (cleanB.length >= 3) return cleanB;
+
+  // Last resort: try everything after the date that isn't an amount
+  const everything = line.substring(afterDate).trim();
+  // Remove all amount strings from it
+  let stripped = everything;
+  for (const a of amounts) {
+    stripped = stripped.replace(a.raw, ' ');
+  }
+  return cleanDesc(stripped);
+}
+
+function cleanDesc(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/^[,\-–—*#\s]+/, '')
+    .replace(/[,\-–—*#\s]+$/, '')
+    .trim();
+}
+
+// ---------------------------------------------------------------------------
+// Main parser
+// ---------------------------------------------------------------------------
+
 export async function parsePdf(file: File): Promise<Transaction[]> {
   const pdfjsLib = await import('pdfjs-dist');
 
@@ -162,11 +212,8 @@ export async function parsePdf(file: File): Promise<Transaction[]> {
 function parseLines(allLines: string[]): Transaction[] {
   const txns: Transaction[] = [];
 
-  // Section tracking
   let inTransactionSection = false;
   let inSkipSection = false;
-  // Once we see the first real transaction, we're "warmed up" — helps with
-  // statements that don't have clear section headers
   let seenFirstTxn = false;
 
   for (let i = 0; i < allLines.length; i++) {
@@ -184,25 +231,20 @@ function parseLines(allLines: string[]): Transaction[] {
       continue;
     }
 
-    // Skip lines we know are noise
+    // Skip noise
     if (SKIP_LINE_RE.test(line)) continue;
     if (COLUMN_HEADER_RE.test(line)) continue;
-
-    // If we're in an explicit skip section, ignore everything
     if (inSkipSection) continue;
 
     const date = extractDate(line);
 
-    // --- Continuation line (no date): append to previous transaction ---
+    // --- Continuation line: append to previous transaction's description ---
     if (!date && txns.length > 0 && (inTransactionSection || seenFirstTxn)) {
-      // Only append if this line has no amount (pure description continuation)
-      // and isn't a section header
       const lineAmounts = extractAmounts(line);
       if (lineAmounts.length === 0 && line.length > 2 && !SKIP_LINE_RE.test(line)) {
-        const cleaned = line.replace(/\s+/g, ' ').replace(/^[,\-–—*#\s]+/, '').trim();
+        const cleaned = cleanDesc(line);
         if (cleaned && !SKIP_SECTION_RE.test(cleaned)) {
           txns[txns.length - 1].description += ' ' + cleaned;
-          // Re-categorize with the fuller description
           txns[txns.length - 1].category = categorizeTransaction(txns[txns.length - 1].description);
         }
       }
@@ -211,16 +253,15 @@ function parseLines(allLines: string[]): Transaction[] {
 
     if (!date) continue;
 
-    // --- Try to find amount on this line ---
+    // --- Find amounts (same line or look-ahead) ---
     let amounts = extractAmounts(line);
     let amountLine = line;
     let lookAhead = 0;
 
-    // Look ahead up to 2 lines for the amount if not on this line
     if (amounts.length === 0) {
       for (let j = 1; j <= 2 && i + j < allLines.length; j++) {
         const nextLine = allLines[i + j];
-        if (extractDate(nextLine)) break; // next transaction starts
+        if (extractDate(nextLine)) break;
         if (SKIP_LINE_RE.test(nextLine)) continue;
         const nextAmounts = extractAmounts(nextLine);
         if (nextAmounts.length > 0) {
@@ -234,21 +275,18 @@ function parseLines(allLines: string[]): Transaction[] {
 
     if (amounts.length === 0) continue;
 
-    // Pick the transaction amount (not a running balance):
-    // - If only one amount, use it
-    // - Amex: typically one amount per line (the charge)
-    // - PNC: may have amount + running balance; the first is usually the txn
-    // - If two amounts and the second is much larger, it's likely a balance
+    // --- Pick the transaction amount (not a running balance) ---
     let amount: number;
     if (amounts.length === 1) {
       amount = amounts[0].value;
     } else if (amounts.length === 2 && amounts[1].value > amounts[0].value * 3) {
-      // Second is probably a running balance
+      // Second is likely a running balance
       amount = amounts[0].value;
     } else {
-      // Default: use the last amount (most statements put txn amount last
-      // before an optional balance column)
-      amount = amounts[amounts.length - 1].value;
+      // For PNC (date → amount → desc): first amount is the transaction
+      // For most CCs (date → desc → amount): last amount is the transaction
+      // We rely on description extraction to figure out the layout
+      amount = amounts[0].value;
     }
     if (amount === 0) continue;
 
@@ -256,52 +294,37 @@ function parseLines(allLines: string[]): Transaction[] {
     let description = '';
 
     if (amountLine === line) {
-      const dateIdx = line.indexOf(date);
-      const firstAmt = amounts[0];
-      description = line.substring(dateIdx + date.length, firstAmt.index).trim();
-
-      // If there's a second date (post date), skip past it
-      const descDate = extractDate(description);
-      if (descDate) {
-        const dIdx = description.indexOf(descDate);
-        description = description.substring(dIdx + descDate.length).trim();
-      }
+      description = extractDescription(line, date, amounts);
     } else {
-      // Amount is on a subsequent line — description is rest of the date line
-      // plus any intermediate lines
+      // Amount on a subsequent line — description is text after the date on the current line
       const dateIdx = line.indexOf(date);
       description = line.substring(dateIdx + date.length).trim();
 
-      // Skip past a second date (posting date) if present
-      const descDate = extractDate(description);
-      if (descDate) {
-        const dIdx = description.indexOf(descDate);
-        description = description.substring(dIdx + descDate.length).trim();
+      // Skip a second date (posting date) if present
+      const postDate = extractDate(description);
+      if (postDate) {
+        const pdIdx = description.indexOf(postDate);
+        description = description.substring(pdIdx + postDate.length).trim();
       }
 
+      // Include intermediate continuation lines
       for (let j = 1; j < lookAhead; j++) {
         const midLine = allLines[i + j].trim();
         if (midLine && !SKIP_LINE_RE.test(midLine)) {
           description += ' ' + midLine;
         }
       }
+      description = cleanDesc(description);
     }
 
-    // Clean up description
-    description = description
-      .replace(/\s+/g, ' ')
-      .replace(/^[,\-–—*#\s]+/, '')
-      .replace(/[,\-–—*#\s]+$/, '')
-      .trim();
-
-    if (!description) continue;
+    if (!description || description.length < 2) continue;
     if (SKIP_LINE_RE.test(description)) continue;
 
     const category = categorizeTransaction(description);
     txns.push({ date, description, amount, category });
 
     seenFirstTxn = true;
-    inTransactionSection = true; // auto-enter transaction mode once we see one
+    inTransactionSection = true;
 
     if (lookAhead > 0) i += lookAhead;
   }
