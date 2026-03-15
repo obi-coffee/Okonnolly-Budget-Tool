@@ -19,6 +19,8 @@ export default function ImportPage() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<AccountType>('credit_card');
   const [excludeFlags, setExcludeFlags] = useState<Record<number, boolean>>({});
+  const [filterCat, setFilterCat] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // ---------- Merge into preview (supports adding multiple files) ----------
   const applyPreview = useCallback((txns: Transaction[]) => {
@@ -151,6 +153,17 @@ export default function ImportPage() {
     setCategories(cats);
   };
 
+  const recategorize = (txnIndex: number, newCategory: string) => {
+    const updated = transactions.map((t, i) =>
+      i === txnIndex ? { ...t, category: newCategory } : t
+    );
+    setTransactions(updated);
+    rebuildCategories(updated);
+    // Remember this categorization for future imports
+    const t = updated[txnIndex];
+    rememberCategories([{ description: t.description, category: newCategory }]);
+  };
+
   const clearAll = () => {
     setTransactions([]);
     setCategories([]);
@@ -158,6 +171,16 @@ export default function ImportPage() {
 
   const flaggedCount = preview.filter((_, i) => excludeFlags[i]).length;
   const importCount = preview.length - flaggedCount;
+
+  // Filter imported transactions for the review table
+  const usedCategories = [...new Set(transactions.map(t => t.category))].sort();
+  const filteredTxns = transactions
+    .map((t, i) => ({ ...t, _idx: i }))
+    .filter(t => {
+      if (filterCat !== 'all' && t.category !== filterCat) return false;
+      if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      return true;
+    });
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -301,27 +324,95 @@ export default function ImportPage() {
         </Card>
       )}
 
-      {/* Existing data summary */}
+      {/* Imported transactions — review & recategorize */}
       {transactions.length > 0 && (
-        <Card title={`Imported Data — ${transactions.length} transactions`}>
-          <div className="space-y-2">
-            {categories.map(cat => (
-              <div key={cat.category} className="flex items-center gap-3">
-                <span className="flex-1 text-sm">{cat.category}</span>
-                <span className="text-sm font-medium">{fmt(cat.annualEstimate)}</span>
-                <span className="text-xs text-gray-400">annual</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
-            <span className="text-sm font-medium">
-              Total: {fmt(categories.reduce((s, c) => s + c.annualEstimate, 0))}/year
-            </span>
-            <button onClick={clearAll} className="text-xs text-red-400 hover:text-red-500">
-              Clear All Data
-            </button>
-          </div>
-        </Card>
+        <>
+          <Card title={`Spending Summary — ${transactions.filter(t => !t.isCcPayment).length} transactions`}>
+            <div className="space-y-2">
+              {categories.map(cat => (
+                <div key={cat.category} className="flex items-center gap-3">
+                  <span className="flex-1 text-sm">{cat.category}</span>
+                  <span className="text-sm font-medium">{fmt(cat.annualEstimate)}</span>
+                  <span className="text-xs text-gray-400">annual</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+              <span className="text-sm font-medium">
+                Total: {fmt(categories.reduce((s, c) => s + c.annualEstimate, 0))}/year
+              </span>
+              <button onClick={clearAll} className="text-xs text-red-400 hover:text-red-500">
+                Clear All Data
+              </button>
+            </div>
+          </Card>
+
+          <Card title="Review & Recategorize Transactions">
+            <div className="flex flex-wrap gap-3 mb-4">
+              <input
+                type="text"
+                placeholder="Search descriptions..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="flex-1 min-w-[200px] px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <select
+                value={filterCat}
+                onChange={e => setFilterCat(e.target.value)}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                <option value="all">All Categories ({transactions.length})</option>
+                {usedCategories.map(c => (
+                  <option key={c} value={c}>{c} ({transactions.filter(t => t.category === c).length})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-[500px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-white dark:bg-gray-900">
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="py-2 pr-2">Date</th>
+                    <th className="py-2 pr-2">Description</th>
+                    <th className="py-2 pr-2">Source</th>
+                    <th className="py-2 pr-2 text-right">Amount</th>
+                    <th className="py-2">Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTxns.map(t => (
+                    <tr key={t._idx} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="py-1.5 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{t.date}</td>
+                      <td className="py-1.5 pr-2 truncate max-w-[200px]" title={t.description}>{t.description}</td>
+                      <td className="py-1.5 pr-2 text-xs text-gray-400">
+                        {t.source === 'checking' ? 'Checking' : t.source === 'credit_card' ? 'Credit Card' : '—'}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right font-medium">{fmt(t.amount)}</td>
+                      <td className="py-1.5">
+                        <select
+                          value={t.category}
+                          onChange={e => recategorize(t._idx, e.target.value)}
+                          className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-transparent dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {DEFAULT_CATEGORIES.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredTxns.length === 0 && (
+                <p className="text-center text-sm text-gray-400 py-6">No transactions match your filters.</p>
+              )}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400">
+              Showing {filteredTxns.length} of {transactions.length} transactions. Category changes are saved immediately and remembered for future imports.
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );
