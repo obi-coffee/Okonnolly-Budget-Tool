@@ -10,15 +10,12 @@
   },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.5",
-    "@next/font": "^14.2.15",
-    "googleapis": "^171.4.0",
     "next": "^15.5.12",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^5.5.207",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.8.0",
-    "resend": "^6.9.4",
     "uuid": "^13.0.0"
   },
   "engines": {

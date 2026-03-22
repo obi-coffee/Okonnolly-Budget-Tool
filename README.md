@@ -1,78 +1,36 @@
-# tāst Coffee — Verified Roaster Partner Landing Page
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-A Next.js landing page for tāst Coffee's Verified Roaster Partner (VRP) program. Collects interest from prospective roaster partners.
+## Getting Started
 
-## Quick Start
+First, run the development server:
 
 ```bash
-npm install
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Environment Variables
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-Copy `.env.local.example` to `.env.local` and fill in the values:
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-```bash
-cp .env.local.example .env.local
-```
+## Learn More
 
-### Resend (Email Notifications)
+To learn more about Next.js, take a look at the following resources:
 
-1. Sign up at [resend.com](https://resend.com)
-2. Create an API key in the dashboard
-3. Set `RESEND_API_KEY` in `.env.local`
-4. Set `NOTIFICATION_EMAIL` to the email address that should receive application notifications
-5. For production, verify your sending domain in Resend and update the `from` address in `src/lib/resend.ts`
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-### Google Sheets (Submission Logging)
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select an existing one)
-3. Enable the **Google Sheets API** under APIs & Services
-4. Go to **Credentials** > Create Credentials > **Service Account**
-5. Give it a name (e.g., "tast-vrp-sheets") and create
-6. Click the service account > **Keys** tab > Add Key > Create new key > **JSON**
-7. From the downloaded JSON, copy:
-   - `client_email` → `GOOGLE_SHEETS_CLIENT_EMAIL`
-   - `private_key` → `GOOGLE_SHEETS_PRIVATE_KEY` (keep the quotes and `\n` characters)
-8. Create a Google Sheet and add these headers to Row 1:
-   `Timestamp | Roastery Name | Contact Name | Email | Phone | Location | Website | Instagram | Year Founded | Heard About | Interest | Notes`
-9. Share the sheet with the service account email (Editor access)
-10. Copy the spreadsheet ID from the URL (`/spreadsheets/d/{THIS_PART}/edit`) → `GOOGLE_SHEETS_SPREADSHEET_ID`
+## Deploy on Vercel
 
-## Deploy to Vercel
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-1. Push the repo to GitHub
-2. Import the project at [vercel.com/new](https://vercel.com/new)
-3. Add all environment variables from `.env.local.example` in the Vercel project settings
-4. Deploy
-
-## Swapping the Logo for an SVG
-
-The logo is rendered as styled text in `src/components/Logo.tsx`. To use an SVG:
-
-1. Place your SVG file in `public/` (e.g., `public/tast-logo.svg`)
-2. Update `src/components/Logo.tsx`:
-
-```tsx
-import Image from 'next/image';
-
-export default function Logo() {
-  return (
-    <a href="/" aria-label="tāst Coffee home">
-      <Image src="/tast-logo.svg" alt="tāst Coffee" width={120} height={40} />
-    </a>
-  );
-}
-```
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Styling**: Tailwind CSS
-- **Email**: Resend
-- **Data**: Google Sheets API
-- **Deployment**: Vercel
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
