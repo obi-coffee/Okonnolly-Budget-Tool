@@ -1,3 +1,130 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-mono: 'Space Mono', 'Courier New', monospace;
+  --font-serif: 'Times New Roman', Times, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-handwritten: 'Caveat', cursive;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #FBF9F3;
+  color: #2D2D2D;
+}
+
+/* Skip to content link */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 0.75rem 1.5rem;
+  background-color: #F05881;
+  color: white;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  border-radius: 0 0 0.5rem 0.5rem;
+  transition: top 0.2s ease;
+}
+
+.skip-to-content:focus {
+  top: 0;
+  outline: 2px solid #F05881;
+  outline-offset: 2px;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid #F05881;
+  outline-offset: 2px;
+}
+
+/* Scroll-triggered animation */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+.animate-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Form input styling */
+.form-input {
+  width: 100%;
+  padding: 0.75rem 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #2D2D2D;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: #2D2D2D;
+  transition: border-color 0.2s ease;
+}
+
+.form-input::placeholder {
+  color: #999;
+}
+
+.form-input:focus {
+  outline: none;
+  border-bottom-color: #F05881;
+}
+
+.form-input.error {
+  border-bottom-color: #F05881;
+}
+
+/* Select dropdown */
+.form-select {
+  width: 100%;
+  padding: 0.75rem 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #2D2D2D;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: #2D2D2D;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%232D2D2D' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  transition: border-color 0.2s ease;
+}
+
+.form-select:focus {
+  outline: none;
+  border-bottom-color: #F05881;
+}
+
+/* Textarea */
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #2D2D2D;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: #2D2D2D;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.2s ease;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-bottom-color: #F05881;
+}
